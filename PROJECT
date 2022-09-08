@@ -3,4 +3,10 @@ layout:
 - go.kubebuilder.io/v3
 projectName: kubearchive
 repo: github.com/adambkaplan/kubearchive
+resources:
+- controller: true
+  group: batch
+  kind: Job
+  path: k8s.io/api/batch/v1
+  version: v1
 version: "3"
