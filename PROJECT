@@ -1,0 +1,6 @@
+domain: kubearchive.io
+layout:
+- go.kubebuilder.io/v3
+projectName: kubearchive
+repo: github.com/adambkaplan/kubearchive
+version: "3"
