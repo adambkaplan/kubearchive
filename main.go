@@ -24,8 +24,8 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -43,7 +43,6 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(batchv1.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
 }
@@ -89,9 +88,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.JobReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+	if err = controllers.NewDynamicReconciler(mgr.GetClient(), mgr.GetScheme(), schema.GroupVersionKind{
+		Group:   "batch",
+		Version: "v1",
+		Kind:    "Job",
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Job")
 		os.Exit(1)
