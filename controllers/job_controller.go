@@ -19,8 +19,9 @@ package controllers
 import (
 	"context"
 
-	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -30,10 +31,19 @@ const (
 	ArchivedAnnotation = "kubarchive.io/archived"
 )
 
-// JobReconciler reconciles a Job object
-type JobReconciler struct {
+// DynamicReconciler reconciles an object with the given GroupVersionKind
+type DynamicReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme           *runtime.Scheme
+	GroupVersionKind schema.GroupVersionKind
+}
+
+func NewDynamicReconciler(client client.Client, scheme *runtime.Scheme, gvk schema.GroupVersionKind) *DynamicReconciler {
+	return &DynamicReconciler{
+		Client:           client,
+		Scheme:           scheme,
+		GroupVersionKind: gvk,
+	}
 }
 
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
@@ -45,37 +55,43 @@ type JobReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
-func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *DynamicReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	job := &batchv1.Job{}
-	log.V(5).Info("reconciling Job")
-	if err := r.Client.Get(ctx, req.NamespacedName, job); err != nil {
-		log.Error(err, "unable to fetch Job")
+	obj := r.getUnstructuredObject()
+	log.V(5).Info("reconciling object")
+	if err := r.Client.Get(ctx, req.NamespacedName, obj); err != nil {
+		log.Error(err, "unable to fetch object")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	annotations := job.GetAnnotations()
+	annotations := obj.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
 	if _, ok := annotations[ArchivedAnnotation]; ok {
-		log.V(5).Info("Job has already been archived")
+		log.V(5).Info("object has already been archived")
 		return ctrl.Result{}, nil
 	}
 	annotations[ArchivedAnnotation] = "true"
-	job.SetAnnotations(annotations)
-	if err := r.Client.Update(ctx, job); err != nil {
-		log.Error(err, "failed to update Job")
+	obj.SetAnnotations(annotations)
+	if err := r.Client.Update(ctx, obj); err != nil {
+		log.Error(err, "failed to update object")
 		return ctrl.Result{}, err
 	}
 	// Always requeue if there is an update
-	log.Info("updated Job with archive annotation")
+	log.Info("updated object with archive annotation")
 	return ctrl.Result{Requeue: true}, nil
 }
 
+func (r *DynamicReconciler) getUnstructuredObject() *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(r.GroupVersionKind)
+	return obj
+}
+
 // SetupWithManager sets up the controller with the Manager.
-func (r *JobReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *DynamicReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&batchv1.Job{}).
+		For(r.getUnstructuredObject()).
 		Complete(r)
 }
