@@ -11,8 +11,14 @@ When properly configured, `kubearchive` can also store logs for that object's co
 
 ## Installation
 
-Run the following:
+Clone this repository, then run the following make command:
 
 ```sh
 $ make deploy
 ```
+
+## Reference
+
+Use the [REST interface guide](docs/reference/rest-interface.md) to understand how to query and fetch data from Kuberarchive.
+
+Refer to the [Architecture](docs/architecture/architecture.md) diagram to understand how Kubearchive works.
