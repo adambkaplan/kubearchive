@@ -1,0 +1,4 @@
+# Insert the hostname for your cluster (and any other ingress patches) here.
+- op: replace
+  path: /spec/rules/0/host
+  value: dev1.example.com

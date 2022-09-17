@@ -1,5 +1,7 @@
 resources:
 - manager.yaml
+- apiserver_service.yaml
+- apiserver_ingress.yaml
 
 generatorOptions:
   disableNameSuffixHash: true

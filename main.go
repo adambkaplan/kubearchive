@@ -17,8 +17,12 @@ limitations under the License.
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
+	"net/http"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -31,6 +35,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/adambkaplan/kubearchive/controllers"
 	//+kubebuilder:scaffold:imports
@@ -51,8 +57,10 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	var apiserverAddr string
+	flag.StringVar(&apiserverAddr, "api-server-bind-address", ":8080", "The address the apiserver endpoint binds to.")
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8081", "The address the metric endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8082", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -107,9 +115,41 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+	signalCtx := ctrl.SetupSignalHandler()
+
+	go func() {
+		setupLog.Info("starting manager")
+		if err := mgr.Start(signalCtx); err != nil {
+			setupLog.Error(err, "problem running manager")
+			os.Exit(1)
+		}
+	}()
+
+	router := gin.Default()
+	router.GET("/archive", func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"message": "hello"})
+	})
+	srv := &http.Server{
+		Addr:    apiserverAddr,
+		Handler: router,
+	}
+
+	go func() {
+		setupLog.Info("starting apiserver")
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			setupLog.Error(err, "problem running apiserver")
+			os.Exit(1)
+		}
+	}()
+
+	<-signalCtx.Done()
+
+	setupLog.Info("shutting down apiserver")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		setupLog.Error(err, "apiserver forced to shutdown")
 		os.Exit(1)
 	}
+	setupLog.Info("shutdown complete")
 }

@@ -1,0 +1,17 @@
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: apiserver-ingress
+  namespace: system
+spec:
+  rules:
+  - host: localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: apiserver-service
+            port:
+              name: http
