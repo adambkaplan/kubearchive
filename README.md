@@ -9,13 +9,9 @@ This project has largely been inspired by [Tekton Results](https://github.com/te
 `kubearchive` watches objects on your cluster, and stores its data in a database.
 When properly configured, `kubearchive` can also store logs for that object's containers.
 
-## Installation
+## Try It Out!
 
-Clone this repository, then run the following make command:
-
-```sh
-$ make deploy
-```
+Follow the [installation instructions](docs/installation.md) to build and deploy Kubearchive.
 
 ## Reference
 

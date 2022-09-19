@@ -1,0 +1,15 @@
+# Example kustomization that patches the hostname for the apiserver's ingress.
+# This example assumes a Kustomize structure of /config/overlays/{environment}.
+bases:
+# Depending on your choice of directory structure, you may need to modify the path to the default
+# deployment.
+- ../../default
+
+patchesJson6902:
+- target:
+    group: networking.k8s.io
+    version: v1
+    kind: Ingress
+    name: apiserver-ingress
+    namespace: system
+  path: apiserver-ingress-patch.yaml
