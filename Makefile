@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= ghcr.io/kubearchive:latest
+IMG ?= ghcr.io/adambkaplan/kubearchive:main
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.24.2
 
@@ -58,6 +58,23 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
+KUBEARCHIVE_HOSTNAME ?= localhost:8080
+
+.PHONY: test-e2e
+test-e2e: ## Run e2e tests
+	KUBEARCHIVE_TEST_SUITE=e2e KUBEARCHIVE_HOSTNAME=${KUBEARCHIVE_HOSTNAME} go test ./test/e2e/...
+
+KIND_CLUSTER_NAME ?= kubearchive-testing
+
+.PHONY: setup-kind
+setup-kind: kind ## Set up a KinD cluster for testing
+	$(KIND) create cluster --config test/e2e/kind/config.yaml --name=${KIND_CLUSTER_NAME}
+
+.PHONY: setup-ingress
+setup-ingress: ## Set up the NGINX ingress controller on a cluster. Optional
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s
+
 ##@ Build
 
 .PHONY: build
@@ -71,12 +88,16 @@ run: manifests generate fmt vet ## Run a controller from your host.
 CONTAINER_ENGINE ?= docker
 
 .PHONY: container-build
-container-build: test ## Build container image with the manager.
+container-build: ## Build container image with kubearchive.
 	${CONTAINER_ENGINE} build -t ${IMG} .
 
 .PHONY: container-push
-container-push: ## Push docker image with the manager.
+container-push: ## Push container image with kubearchive.
 	${CONTAINER_ENGINE} push ${IMG}
+
+.PHONY: container-load-kind
+container-load-kind: kind ## Push a (local) docker image into a KinD cluster
+	$(KIND) load docker-image ${IMG} --name ${KIND_CLUSTER_NAME}
 
 ##@ Deployment
 
@@ -114,10 +135,12 @@ $(LOCALBIN):
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
+KIND ?= $(LOCALBIN)/kind
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v3.8.7
 CONTROLLER_TOOLS_VERSION ?= v0.9.2
+KIND_VERSION ?= v0.15.0
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -134,3 +157,8 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+.PHONY: kind
+kind: $(KIND) ## Download and install KinD if necessary
+$(KIND): $(LOCALBIN)
+	test -s $(LOCALBIN)/kind || { curl -Lo $(LOCALBIN)/kind https://kind.sigs.k8s.io/dl/$(KIND_VERSION)/kind-linux-amd64 && chmod +x $(LOCALBIN)/kind; }
