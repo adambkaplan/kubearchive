@@ -1,5 +1,6 @@
 on:
-  push: [main]
+  push: 
+    branches: [ main ]
 name: publish/github
 
 env:
